@@ -1,15 +1,19 @@
 # ESP-IDF 构建产物
-build/
-build_verify/
-build_*/
+# ★ 开头的 "/" 表示只匹配仓库根目录 —— 这个斜杠不能省：
+#   build/ 会连 tools/build/（编译脚本）一起吃，
+#   data/  会连 android/.../ble/data/（协议源码）一起吃。
+/build/
+/build_verify/
+/build_*/
 sdkconfig
 sdkconfig.old
 
 # 构建日志（临时排查用，不入库）
 build_log*.txt
+tools/build/*.log
 
 # 组件管理器自动下载的东西
-managed_components/
+/managed_components/
 dependencies.lock
 .esp-sr-probe/
 
@@ -25,10 +29,12 @@ __pycache__/
 *.pyc
 
 # 串口监视器日志（本地数据，不入库）
-logs/
+/logs/
 
 # 本地资料（照片、清单等个人文件，不是工程的一部分，不入库）
-data/
+# ★ 只忽略根目录那个 data\ —— 不能写成 data/，否则 Android 的
+#   android/app/src/main/java/com/smarthome/ble/data/ 会被一起忽略掉。
+/data/
 
 # 本工程本地的 IDF 沙箱（Python 环境 + IDF_TOOLS_PATH）
 .idf-sandbox/
