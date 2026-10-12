@@ -1,0 +1,7 @@
+# Linux 下的 shell 脚本必须是 LF，防止被 Windows 工具转成 CRLF
+*.sh   text eol=lf executable
+*.bash text eol=lf executable
+
+# patch 也不要被改行尾
+*.patch text eol=lf
+*.diff  text eol=lf

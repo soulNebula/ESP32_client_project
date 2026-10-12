@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0f1720">
+<title>智能家居 · 控制面板</title>
+<!--
+  ===========================================================================
+   智能家居手机控制面板（需求⑧：终端交互）
+  ===========================================================================
+   这是【单文件】网页：手机浏览器直接打开即可，不需要安装、不需要服务器。
+
+   它通过 MQTT over WebSocket 直连 broker，与 ESP32 用的是同一个 broker，
+   只是传输方式不同：
+       ESP32：mqtt://broker.emqx.io:1883        （TCP）
+       本页面：wss://broker.emqx.io:8084/mqtt    （WebSocket + TLS）
+   ⚠ 端口不同（1883 vs 8084），协议也不同，这是最容易配错的地方。
+
+   MQTT topic 约定（与固件 components/App/mqtt_protocol.h 严格一致，符号名仍是 net_proto_*）：
+     订阅  <base>/state        设备状态（4 路灯 + 门 + 蜂鸣器 + 模式 + 网络）
+     订阅  <base>/sensor       温湿度 / 光照 / 雨滴（2 秒一次）
+     订阅  <base>/weather      天气卡片（需求③⑧）
+     订阅  <base>/availability 在线/离线（LWT 遗嘱消息）
+     订阅  <base>/ack          指令执行结果（失败原因会显示出来）
+     订阅  <base>/event        语音 / 按键事件
+     发布  <base>/cmd          控制指令
+     发布  <base>/get          请求重发全部状态
+
+   页面布局（手机竖屏）：
+     ┌────────────────────────────────┐
+     │ 智能家居            [● 在线] 设置│  ← 顶栏：连接状态 + 设置按钮
+     ├────────────────────────────────┤
+     │ ┌──────────┐ ┌──────────┐      │
+     │ │  31.5℃   │ │   58%    │      │  ← 温湿度卡片（≥32℃ 温度闪烁）
+     │ │  温度     │ │  湿度     │      │
+     │ └──────────┘ └──────────┘      │
+     │ ┌────────────────────────────┐ │
+     │ │ 天气: Sunny        光照 42% │ │  ← 天气卡片（下雨变蓝）
+     │ └────────────────────────────┘ │
+     ├────────────────────────────────┤
+     │ [自动模式]  [🔔 蜂鸣器]         │  ← 模式徽章 + 蜂鸣器静音
+     ├────────────────────────────────┤
+     │ 客厅 [开][关]   厨房 [开][关]    │
+     │ 卧室 [开][关]   浴室 [开][关]    │  ← 4 组灯（共 8 个按钮）
+     │ 门   [开][关]   全灯亮/全灯灭    │
+     └────────────────────────────────┘
+  ===========================================================================
+-->
+<style>
+  :root {
+    --bg:        #0f1720;
+    --card:      #18222e;
+    --card2:     #1f2c3a;
+    --line:      #2a3a4c;
+    --text:      #e8eef5;
+    --dim:       #8fa3b8;
+    --accent:    #2f9e6e;
+    --accent2:   #1f7a52;
+    --danger:    #d94141;
+    --danger2:   #a92c2c;
+    --warn2:     #a86512;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    margin: 0;
+    padding: 0 12px 24px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC",
+                 "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+    font-size: 16px;
+    max-width: 560px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  // 顶栏
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 2px 10px;
+    background: var(--bg);
+  }
+  header h1 {
+    flex: 1;
+    margin: 0;
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: .5px;
+  }
+  #conn {
+    font-size: 13px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #333;
+    color: #ddd;
+    white-space: nowrap;
+  }
+  #conn.on   { background: var(--accent2); color: #dff8ec; }
+  #conn.off  { background: var(--danger2); color: #ffe0e0; }
+  #conn.wait { background: var(--warn2);   color: #fff0d6; }
+  #btnCfg {
+    background: var(--card2);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+
+  // 卡片
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  .row { display: flex; gap: 12px; }
+  .row > .card { flex: 1; margin-bottom: 12px; }
+
+  .metric-label { font-size: 13px; color: var(--dim); margin-top: 4px; }
+  .metric-value {
+    font-size: 34px;
+    font-weight: 650;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+  .metric-unit { font-size: 16px; font-weight: 500; color: var(--dim); margin-left: 2px; }
+
+  /* 需求②（用户改过需求）：温度 ≥32℃ 时数字闪烁（网页上仍然用红色 + 动画，
+     屏幕那边是单色屏，只能"数字闪烁 + 整行反白"，两边语义一致：都在闪） */
+  .metric-value.hot { color: #ff4d4d; animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+
+  .metric-value.stale { color: var(--dim); font-size: 26px; }
+
+  .weather-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .weather-text { font-size: 19px; font-weight: 600; }
+  .weather-text.rain { color: #5cb3ff; }
+
+  // 模式徽章
+  .badges { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .badge {
+    border: none;
+    border-radius: 999px;
+    padding: 9px 18px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+    background: var(--card2);
+  }
+  .badge.auto   { background: var(--accent2); }
+  .badge.manual { background: var(--warn2); }
+  .badge.muted  { background: var(--danger2); }
+  .badge.spacer { flex: 1; background: transparent; }
+
+  // 设备按钮
+  .dev-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .dev {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 12px;
+  }
+  .dev-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .dev-name { font-size: 16px; font-weight: 600; }
+  .dev-dot {
+    width: 11px; height: 11px; border-radius: 50%;
+    background: #3a4a5c;   /* 灭 = 灰 */
+    transition: background .15s;
+  }
+  .dev-dot.on { background: #ffd21f; box-shadow: 0 0 9px #ffd21f88; }  /* 亮 = 黄 */
+
+  .btn-pair { display: flex; gap: 8px; }
+  .btn-pair button { flex: 1; }
+
+  button.act {
+    border-radius: 10px;
+    padding: 10px 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+    background: var(--card2);
+    border: 1px solid var(--line);
+    transition: transform .06s, filter .12s;
+  }
+  button.act:active { transform: scale(.96); filter: brightness(1.3); }
+  button.act.on-btn  { background: var(--accent2); border-color: var(--accent); }
+  button.act.off-btn { background: #3a2426;        border-color: #6b3438; }
+  button.act.all-on  { background: var(--accent2); border-color: var(--accent); }
+  button.act.all-off { background: #3a2426;        border-color: #6b3438; }
+
+  .wide { display: flex; gap: 12px; margin-top: 2px; }
+  .wide button { flex: 1; padding: 15px 0; font-size: 17px; }
+
+  // 设置面板
+  #cfgPanel { display: none; }
+  #cfgPanel.show { display: block; }
+  label.fld { display: block; font-size: 13px; color: var(--dim); margin: 10px 0 4px; }
+  input.fld {
+    width: 100%;
+    background: #0c141c;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    padding: 11px 12px;
+    color: var(--text);
+    font-size: 15px;
+  }
+  .hint { font-size: 12px; color: var(--dim); line-height: 1.7; margin-top: 10px; }
+  .hint code { background: #0c141c; padding: 1px 5px; border-radius: 4px; }
+  .save-row { display: flex; gap: 10px; margin-top: 14px; }
+  .save-row button { flex: 1; padding: 13px 0; border-radius: 10px; font-size: 15px; font-weight: 600; color: #fff; }
+  #btnSave { background: var(--accent2); border: none; }
+  #btnBack { background: var(--card2); border: 1px solid var(--line); }
+
+  /* 底部小字日志，方便现场排查 */
+  #log {
+    margin-top: 14px; font-size: 12px; color: var(--dim);
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    line-height: 1.7; max-height: 140px; overflow-y: auto;
+    background: #0c141c; border: 1px solid var(--line); border-radius: 10px; padding: 10px;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .warnbox {
+    background: #3a2426; border: 1px solid #6b3438; color: #ffd9d9;
+    border-radius: 10px; padding: 10px 12px; font-size: 13px; line-height: 1.7;
+    margin-bottom: 12px;
+  }
+  .warnbox code { background: #24171a; padding: 1px 5px; border-radius: 4px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>智能家居</h1>
+  <span id="conn" class="wait">未连接</span>
+  <button id="btnCfg">设置</button>
+</header>
+
+<!-- 首次使用时提示填 base（从串口开机日志里抄） -->
+<div id="setupHint" class="warnbox">
+  ⚠ 还没配置设备。<br>
+  打开串口监视，在开机日志里找这一行：<br>
+  <code>topics: state=smarthome/xxxxxx/state ...</code><br>
+  其中 <code>smarthome/xxxxxx</code> 就是你的 <b>base</b>，点右上角「设置」填进去。
+</div>
+
+<div id="mainPanel">
+
+  <!-- ============ 传感器卡片（需求②③） ============ -->
+  <div class="row">
+    <div class="card">
+      <div id="tempV" class="metric-value stale">--<span class="metric-unit">℃</span></div>
+      <div class="metric-label">温度</div>
+    </div>
+    <div class="card">
+      <div id="humiV" class="metric-value stale">--<span class="metric-unit">%</span></div>
+      <div class="metric-label">湿度</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="weather-line">
+      <div id="weatherV" class="weather-text">天气: Sunny</div>
+      <div id="lightV" style="color:var(--dim);font-size:14px;">光照 --</div>
+    </div>
+  </div>
+
+  <!-- ============ 模式 + 蜂鸣器（需求①⑥） ============ -->
+  <div class="card badges">
+    <button id="btnMode" class="badge">模式 --</button>
+    <button id="btnMute" class="badge">🔔 蜂鸣器</button>
+    <span class="badge spacer"></span>
+    <span id="netInfo" style="font-size:12px;color:var(--dim);"></span>
+  </div>
+
+  <!-- ============ 设备开关（需求④⑤） ============ -->
+  <div class="dev-grid">
+    <div class="dev">
+      <div class="dev-head"><span class="dev-name">客厅灯</span><span id="dot_led_living" class="dev-dot"></span></div>
+      <div class="btn-pair">
+        <button class="act on-btn"  data-dev="led_living" data-act="on">开</button>
+        <button class="act off-btn" data-dev="led_living" data-act="off">关</button>
+      </div>
+    </div>
+    <div class="dev">
+      <div class="dev-head"><span class="dev-name">厨房灯</span><span id="dot_led_kitchen" class="dev-dot"></span></div>
+      <div class="btn-pair">
+        <button class="act on-btn"  data-dev="led_kitchen" data-act="on">开</button>
+        <button class="act off-btn" data-dev="led_kitchen" data-act="off">关</button>
+      </div>
+    </div>
+    <div class="dev">
+      <div class="dev-head"><span class="dev-name">卧室灯</span><span id="dot_led_bedroom" class="dev-dot"></span></div>
+      <div class="btn-pair">
+        <button class="act on-btn"  data-dev="led_bedroom" data-act="on">开</button>
+        <button class="act off-btn" data-dev="led_bedroom" data-act="off">关</button>
+      </div>
+    </div>
+    <div class="dev">
+      <div class="dev-head"><span class="dev-name">浴室灯</span><span id="dot_led_bath" class="dev-dot"></span></div>
+      <div class="btn-pair">
+        <button class="act on-btn"  data-dev="led_bath" data-act="on">开</button>
+        <button class="act off-btn" data-dev="led_bath" data-act="off">关</button>
+      </div>
+    </div>
+    <div class="dev">
+      <div class="dev-head"><span class="dev-name">门</span><span id="dot_door" class="dev-dot"></span></div>
+      <div class="btn-pair">
+        <button class="act on-btn"  data-dev="door" data-act="open">开</button>
+        <button class="act off-btn" data-dev="door" data-act="close">关</button>
+      </div>
+    </div>
+    <div class="dev" style="display:flex;flex-direction:column;justify-content:center;">
+      <button class="act all-on"  data-dev="all" data-act="on">全灯亮</button>
+      <button class="act all-off" data-dev="all" data-act="off" style="margin-top:8px;">全灯灭</button>
+    </div>
+  </div>
+
+  <div id="log"></div>
+</div>
+
+<!-- ============ 设置面板 ============ -->
+<div id="cfgPanel" class="card">
+  <label class="fld">设备 base（例如 smarthome/4d3b9c）</label>
+  <input id="fBase" class="fld" placeholder="smarthome/4d3b9c" autocomplete="off" spellcheck="false">
+
+  <label class="fld">MQTT WebSocket 地址</label>
+  <input id="fWs" class="fld" placeholder="wss://broker.emqx.io:8084/mqtt" autocomplete="off" spellcheck="false">
+
+  <div class="hint">
+    · <b>base</b> 在主程序开机日志里，格式是 <code>&lt;topic前缀&gt;/&lt;唯一ID&gt;</code>。<br>
+    · ESP32 走 <code>mqtt://broker.emqx.io:1883</code>（TCP），
+      本页面必须走 <code>wss://broker.emqx.io:8084/mqtt</code>（WebSocket + TLS）。
+      <b>端口不一样，别填错。</b><br>
+    · 自建 broker 需要额外打开 WebSocket 监听（mosquitto 里配 <code>listener 8084</code> 加 <code>protocol websockets</code>）。<br>
+    · 配置存在浏览器本地，换手机需要重新填。
+  </div>
+
+  <div class="save-row">
+    <button id="btnSave">保存并连接</button>
+    <button id="btnBack">返回</button>
+  </div>
+</div>
+
+<!-- MQTT.js：唯一的外部依赖。加载失败时页面会提示，不影响固件功能 -->
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<script>
+"use strict";
+
+// 配置持久化
+const LS_BASE = "sh_base";
+const LS_WS   = "sh_ws";
+const DEF_WS  = "wss://broker.emqx.io:8084/mqtt";
+
+let BASE  = localStorage.getItem(LS_BASE) || "";
+let WSURL = localStorage.getItem(LS_WS) || DEF_WS;
+
+const $ = (id) => document.getElementById(id);
+
+// 页面底部日志（现场排查用）
+const logLines = [];
+function log(msg) {
+  const t = new Date().toTimeString().slice(0, 8);
+  logLines.push("[" + t + "] " + msg);
+  if (logLines.length > 60) logLines.shift();
+  const box = $("log");
+  if (box) { box.textContent = logLines.join("\n"); box.scrollTop = box.scrollHeight; }
+}
+
+function setConn(text, cls) {
+  const el = $("conn");
+  el.textContent = text;
+  el.className = cls;
+}
+
+// MQTT 连接
+let client = null;
+
+function connect() {
+  if (!BASE) {
+    $("setupHint").classList.remove("hidden");
+    setConn("未配置", "wait");
+    return;
+  }
+  $("setupHint").classList.add("hidden");
+
+  if (typeof mqtt === "undefined") {
+    setConn("库加载失败", "off");
+    log("MQTT.js 没加载成功 —— 检查网络，或把 mqtt.min.js 下到本地同目录再改 script 路径");
+    return;
+  }
+
+  if (client) { try { client.end(true); } catch (e) {} client = null; }
+
+  setConn("连接中", "wait");
+  log("连接 " + WSURL);
+
+  // 客户端 ID 带随机后缀，避免多台手机/多个标签页互相顶掉
+  const cid = "sh-web-" + Math.random().toString(16).slice(2, 10);
+  client = mqtt.connect(WSURL, {
+    clientId: cid,
+    clean: true,
+    reconnectPeriod: 3000,     // 断线 3 秒后自动重连
+    connectTimeout: 8000,
+    keepalive: 30,
+  });
+
+  client.on("connect", () => {
+    setConn("在线", "on");
+    log("已连接，订阅 " + BASE + "/#");
+    client.subscribe([
+      BASE + "/state",
+      BASE + "/sensor",
+      BASE + "/weather",
+      BASE + "/availability",
+      BASE + "/ack",
+      BASE + "/event",
+    ], { qos: 1 });
+    // 主动要一次全量状态，免得页面打开时显示旧数据
+    client.publish(BASE + "/get", "web");
+  });
+
+  client.on("reconnect", () => { setConn("重连中", "wait"); });
+  client.on("close",     () => { setConn("已断开", "off"); });
+  client.on("error", (e) => {
+    setConn("连接失败", "off");
+    log("MQTT 错误: " + (e && e.message ? e.message : e));
+  });
+
+  client.on("message", (topic, payload) => {
+    const sub = topic.slice(BASE.length + 1);      // 去掉 "<base>/"
+    let text = "";
+    try { text = new TextDecoder().decode(payload); } catch (e) { text = payload.toString(); }
+
+    if (sub === "state")        return onState(text);
+    if (sub === "sensor")       return onSensor(text);
+    if (sub === "weather")      return onWeather(text);
+    if (sub === "availability") return onAvail(text);
+    if (sub === "ack")          return onAck(text);
+    if (sub === "event")        return onEvent(text);
+  });
+}
+
+// 上行数据处理
+// <base>/state —— 设备状态
+function onState(text) {
+  let o;
+  try { o = JSON.parse(text); } catch (e) { log("state JSON 解析失败: " + text.slice(0, 80)); return; }
+
+  ["led_living", "led_kitchen", "led_bedroom", "led_bath", "door"].forEach((dev) => {
+    const dot = $("dot_" + dev);
+    if (!dot) return;
+    const v = o[dev];
+    dot.classList.toggle("on", !!(v && v.power));
+  });
+
+  // 模式徽章（需求①）
+  const auto = !!(o.auto);
+  const mb = $("btnMode");
+  mb.textContent = auto ? "自动模式" : "手动模式";
+  mb.className = "badge " + (auto ? "auto" : "manual");
+  mb.title = auto ? "点一下切到手动模式（灯听语音/手机）"
+                  : "点一下切到自动模式（光控自动开关客厅灯）";
+
+  // 蜂鸣器（需求⑥）
+  const bz = o.buzzer || {};
+  const muteBtn = $("btnMute");
+  if (bz.muted) {
+    muteBtn.textContent = "🔇 已静音";
+    muteBtn.className = "badge muted";
+  } else if (bz.power) {
+    muteBtn.textContent = "🔔 报警中";
+    muteBtn.className = "badge muted";
+  } else {
+    muteBtn.textContent = "🔔 蜂鸣器";
+    muteBtn.className = "badge";
+  }
+
+  // 网络信息
+  $("netInfo").textContent = (o.wifi ? "WiFi✓" : "WiFi✗") +
+                             (o.mqtt ? " MQTT✓" : " MQTT✗") +
+                             (typeof o.rssi === "number" ? " " + o.rssi + "dBm" : "") +
+                             (o.ip ? " " + o.ip : "");
+}
+
+// <base>/sensor —— 温湿度 / 光照 / 雨滴（需求②③）
+function onSensor(text) {
+  let o;
+  try { o = JSON.parse(text); } catch (e) { return; }
+
+  const tv = $("tempV");
+  if (o.temp_valid && typeof o.temp === "number") {
+    const hot = !!o.temp_alert;      // 固件已按 temp_alert_c(默认 32℃) 判定好
+    tv.innerHTML = o.temp.toFixed(1) + '<span class="metric-unit">℃</span>';
+    tv.className = "metric-value" + (hot ? " hot" : "");
+  } else {
+    tv.innerHTML = '--<span class="metric-unit">℃</span>';
+    tv.className = "metric-value stale";
+  }
+
+  const hv = $("humiV");
+  if (o.temp_valid && typeof o.humi === "number") {
+    hv.innerHTML = o.humi.toFixed(0) + '<span class="metric-unit">%</span>';
+    hv.className = "metric-value";
+  } else {
+    hv.innerHTML = '--<span class="metric-unit">%</span>';
+    hv.className = "metric-value stale";
+  }
+
+  if (o.light_valid) {
+    $("lightV").textContent = o.light_is_lux
+      ? "光照 " + Math.round(o.lux) + " lux"
+      : "光照 " + (typeof o.light_pct === "number" ? o.light_pct.toFixed(0) + "%" : "--");
+  } else {
+    $("lightV").textContent = "光照 --";
+  }
+}
+
+// <base>/weather —— 天气卡片（需求③⑧）
+function onWeather(text) {
+  let o;
+  try { o = JSON.parse(text); } catch (e) { return; }
+  const el = $("weatherV");
+  const rain = !!o.raining;
+  el.textContent = "天气: " + (o.text || (rain ? "Raining!" : "Sunny"));
+  el.className = "weather-text" + (rain ? " rain" : "");
+}
+
+// <base>/availability —— LWT 遗嘱消息
+function onAvail(text) {
+  const online = text.trim() === "online";
+  log("设备 availability = " + text.trim());
+  if (!online) setConn("设备离线", "off");
+}
+
+// <base>/ack —— 指令执行结果，失败要把原因显示出来
+function onAck(text) {
+  let o;
+  try { o = JSON.parse(text); } catch (e) { return; }
+  if (o.ok) {
+    log("✓ " + (o.dev || "?") + " " + (o.action || "?"));
+  } else {
+    log("✗ " + (o.dev || "?") + " " + (o.action || "?") + " 被拒: " + (o.detail || "未知原因"));
+  }
+}
+
+// <base>/event —— 语音 / 按键事件
+function onEvent(text) {
+  let o;
+  try { o = JSON.parse(text); } catch (e) { return; }
+  log("↯ " + (o.what || "event") + " " + (o.info || ""));
+}
+
+// 下发指令：统一走 <base>/cmd
+function send(dev, action) {
+  if (!client || !client.connected) {
+    log("未连接，指令没有发出去");
+    return;
+  }
+  const payload = JSON.stringify({ dev: dev, action: action });
+  client.publish(BASE + "/cmd", payload, { qos: 1 });
+  log("→ " + payload);
+}
+
+// 模式/蜂鸣器这类没有 dev 的指令，按固件约定用 action 形式发
+function sendAction(action, value) {
+  if (!client || !client.connected) { log("未连接，指令没有发出去"); return; }
+  const payload = JSON.stringify({ action: action, value: value });
+  client.publish(BASE + "/cmd", payload, { qos: 1 });
+  log("→ " + payload);
+}
+
+// 事件绑定
+// 设备按钮（4 路灯 + 门 + 全灯）
+document.querySelectorAll("button[data-dev]").forEach((b) => {
+  b.addEventListener("click", () => send(b.dataset.dev, b.dataset.act));
+});
+
+// 模式切换（需求①）：按当前模式取反
+$("btnMode").addEventListener("click", () => {
+  const isAuto = $("btnMode").classList.contains("auto");
+  sendAction("mode", isAuto ? "manual" : "auto");
+});
+
+// 蜂鸣器静音（需求⑥）：一按就上静音锁
+$("btnMute").addEventListener("click", () => {
+  const muted = $("btnMute").classList.contains("muted");
+  sendAction("buzzer", muted ? "on" : "off");
+});
+
+// ---- 设置面板 ----
+$("btnCfg").addEventListener("click", () => {
+  $("fBase").value = BASE;
+  $("fWs").value = WSURL;
+  $("mainPanel").classList.add("hidden");
+  $("cfgPanel").classList.add("show");
+  $("setupHint").classList.add("hidden");
+});
+
+$("btnBack").addEventListener("click", () => {
+  $("cfgPanel").classList.remove("show");
+  $("mainPanel").classList.remove("hidden");
+  if (!BASE) $("setupHint").classList.remove("hidden");
+});
+
+$("btnSave").addEventListener("click", () => {
+  // 去掉首尾空白与结尾斜杠 —— 用户很容易多打一个 /
+  BASE  = $("fBase").value.trim().replace(/\/+$/, "");
+  WSURL = $("fWs").value.trim() || DEF_WS;
+  localStorage.setItem(LS_BASE, BASE);
+  localStorage.setItem(LS_WS, WSURL);
+  log("已保存 base=" + BASE);
+  $("cfgPanel").classList.remove("show");
+  $("mainPanel").classList.remove("hidden");
+  connect();
+});
+
+// 启动
+if (!BASE) {
+  $("setupHint").classList.remove("hidden");
+  log("首次使用：请点右上角「设置」填入设备 base");
+} else {
+  connect();
+}
+
+// 页面从后台切回来时，主动要一次最新状态
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && client && client.connected) {
+    client.publish(BASE + "/get", "web");
+  }
+});
+</script>
+</body>
+</html>

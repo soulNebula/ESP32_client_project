@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  非自适应图标的回退（API < 26 或某些启动器直接找 mipmap/ic_launcher）。
+  这里给一个与自适应图标观感一致的矢量版本，省掉一整套 PNG 密度图。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path
+        android:pathData="M0,0 L108,0 L108,108 L0,108 Z"
+        android:fillColor="#0F1720" />
+
+    <path
+        android:pathData="M30,66 L54,44 L78,66"
+        android:strokeColor="#2F9E6E"
+        android:strokeWidth="7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <path
+        android:pathData="M38,64 L38,80 L70,80 L70,64"
+        android:strokeColor="#E8EEF5"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <path
+        android:pathData="M46,36 A12,12 0 0 1 62,36"
+        android:strokeColor="#FFD21F"
+        android:strokeWidth="4"
+        android:strokeLineCap="round" />
+</vector>

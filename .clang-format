@@ -1,0 +1,60 @@
+# 代码风格 —— 与参考工程 esp32_smart_home 保持一致
+# 用 ESP-IDF 自带的 clang-format 执行：
+#   E:\Espressif\tools\esp-clang\*\esp-clang\bin\clang-format.exe -i <文件>
+#
+# 要点（参考工程实测归纳）：
+#   · 花括号一律同行（K&R）：函数 ) {  控制语句 if (x) {  switch (x) {
+#   · 4 空格缩进，不用 Tab
+#   · 连续声明/赋值对齐（bool      led_get_power(...)  /  .field = v, 对齐）
+#   · 注释内容不重排（ReflowComments: false），否则会把注释里的表格画坏
+BasedOnStyle: LLVM
+
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 110
+
+# ★ 花括号同行 —— 参考工程全篇如此
+BreakBeforeBraces: Attach
+
+# 短函数/短语句不合并到一行
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+
+# 对齐：参考工程里 bool      led_get_power() 和 .speed_mode      = 都是对齐的
+AlignConsecutiveDeclarations: true
+AlignConsecutiveAssignments: true
+AlignConsecutiveMacros: true
+AlignConsecutiveBitFields: true
+AlignArrayOfStructures: Right
+
+# 指针靠右：uint8_t *r
+PointerAlignment: Right
+DerivePointerAlignment: false
+
+# 注释内容不动（注释里的 ASCII 表格/框线必须保持原样）
+ReflowComments: false
+
+# 不动 include 顺序（工程里 include 分组是有意的）
+SortIncludes: false
+
+# 缩进大小写标签与 case 内容对齐
+IndentCaseLabels: false
+IndentGotoLabels: false
+
+# 函数调用/声明参数过长时的折行方式
+AlignAfterOpenBracket: Align
+BinPackArguments: true
+BinPackParameters: true
+BreakBeforeBinaryOperators: None
+AllowAllArgumentsOnNextLine: true
+AllowAllParametersOfDeclarationOnNextLine: true
+
+# 转换与运算
+SpaceAfterCStyleCast: false
+SpaceBeforeParens: ControlStatements
+SpacesInParentheses: false
+Cpp11BracedListStyle: true

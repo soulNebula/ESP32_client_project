@@ -1,0 +1,12 @@
+# 声明依赖：本工程唯一的在线组件是 esp-sr（离线语音识别）
+# 语音硬件是 INMP441 数字麦克风，它只出音频不认字，识别必须本机跑：
+#   INMP441(I²S) → ESP-SR AFE → WakeNet 唤醒词 → MultiNet7 命令词
+# 首次构建联网下载 esp-sr 与模型，之后模型落进 flash 的 model 分区，离线也能跑
+# 其余外设（温湿度 SHT30/AHT20、光照、雨滴、门舵机、蜂鸣器、0.96 寸 OLED）
+# 全走 ESP-IDF 自带的 driver，不需要 LVGL / u8g2 之类第三方库
+dependencies:
+  idf:
+    version: ">=5.4.0"
+
+  espressif/esp-sr:
+    version: "2.3.1"

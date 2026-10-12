@@ -1,0 +1,43 @@
+# ESP-IDF 构建产物
+build/
+build_verify/
+build_*/
+sdkconfig
+sdkconfig.old
+
+# 构建日志（临时排查用，不入库）
+build_log*.txt
+
+# 组件管理器自动下载的东西
+managed_components/
+dependencies.lock
+.esp-sr-probe/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+
+# 串口监视器日志（本地数据，不入库）
+logs/
+
+# 本地资料（照片、清单等个人文件，不是工程的一部分，不入库）
+data/
+
+# 本工程本地的 IDF 沙箱（Python 环境 + IDF_TOOLS_PATH）
+.idf-sandbox/
+
+# Android 构建产物与本地配置
+android/.gradle/
+android/build/
+android/app/build/
+android/captures/
+android/local.properties
+android/.idea/
+android/*.iml

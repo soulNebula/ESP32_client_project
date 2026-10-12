@@ -1,0 +1,25 @@
+# ESP32-S3-WROOM-1-N16R8（16MB Flash）分区表 —— 智能家居（光影语音版）
+#
+# 布局：
+#   nvs        24KB   自动化阈值 / 手动自动模式 / 设备上电状态（掉电不丢）
+#   otadata     8KB   OTA 启动标志
+#   phy_init    4KB   RF 校准数据
+#   ota_0       4MB   主固件（当前运行）
+#   ota_1       4MB   备用固件（OTA 升级目标）
+#   model       4MB   ESP-SR 离线识别模型（唤醒词 + 中文命令词，srmodels.bin）
+#   storage   ~3.9MB  SPIFFS：留给以后放网页资源 / 图片
+#
+# ★ 不做 factory 分区：bootloader 在 otadata 无效时会自动退到 ota_0 启动，
+#   首次烧录不受影响；双 OTA 分区以后可以直接远程升级。
+#
+# ★ model 分区名必须【就是 model】：ESP-SR 的构建脚本按这个名字找分区并把
+#   srmodels.bin 烧进去（idf.py flash 会自动带上，不用手工烧）。
+#
+# Name,     Type, SubType,  Offset,   Size,     Flags
+nvs,        data, nvs,      0x9000,   0x6000,
+otadata,    data, ota,      0xf000,   0x2000,
+phy_init,   data, phy,      0x11000,  0x1000,
+ota_0,      app,  ota_0,    0x20000,  0x400000,
+ota_1,      app,  ota_1,    0x420000, 0x400000,
+model,      data, spiffs,   0x820000, 0x400000,
+storage,    data, spiffs,   0xC20000, 0x3E0000,

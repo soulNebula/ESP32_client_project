@@ -1,0 +1,50 @@
+<resources>
+
+    <!--
+      主题：Material3 的 DayNight.NoActionBar + 强制深色配色。
+      （刻意不声明 xmlns:tools —— 声明了却不用是个会误导人的死命名空间。）
+
+      ★ 为什么强制深色：现场是"手机贴在电箱旁边看板子状态"，
+        深色底 + 高对比大字更清楚；网页面板也是深色的，两端观感统一。
+      ★ 为什么不用 Material3 的 DynamicColors：
+        那会让不同手机上颜色不一样，排障时截图对不上色。
+    -->
+    <style name="Theme.SmartHomeBle" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/accent</item>
+        <item name="colorOnPrimary">#FFFFFFFF</item>
+        <item name="colorPrimaryContainer">@color/accent2</item>
+        <item name="colorOnPrimaryContainer">#FFFFFFFF</item>
+        <item name="colorSecondary">@color/accent</item>
+        <item name="colorOnSecondary">#FFFFFFFF</item>
+        <item name="colorSurface">@color/card</item>
+        <item name="colorOnSurface">@color/text</item>
+        <item name="colorSurfaceVariant">@color/card2</item>
+        <!-- ★ Material 1.12.0 起组件改用 colorSurfaceContainerHighest 这一族角色，
+             只设 colorSurfaceVariant 会被**静默忽略**（不报错，但颜色不生效），
+             所以两个都要给，避免"设了没反应"这种最难查的问题。 -->
+        <item name="colorSurfaceContainerHighest">@color/card2</item>
+        <item name="colorOnSurfaceVariant">@color/dim</item>
+        <item name="colorOutline">@color/line</item>
+        <item name="colorError">@color/danger</item>
+        <!-- ★ android:colorBackground 对 Material3 组件基本是空操作
+             （M3 读的是 colorSurface / colorSurfaceContainer*），
+             真正决定窗口底色的是下面的 windowBackground。保留它是为了
+             非 M3 的老控件（如 CheckBox 的默认底）有个一致的兜底。 -->
+        <item name="android:colorBackground">@color/bg</item>
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:navigationBarColor">@color/bg</item>
+        <item name="android:textColorPrimary">@color/text</item>
+        <item name="android:textColorSecondary">@color/dim</item>
+        <item name="android:textColorHint">@color/dim</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="materialAlertDialogTheme">@style/Theme.SmartHomeBle.Dialog</item>
+    </style>
+
+    <style name="Theme.SmartHomeBle.Dialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="colorSurface">@color/card2</item>
+        <item name="colorOnSurface">@color/text</item>
+        <item name="colorPrimary">@color/accent</item>
+    </style>
+
+</resources>

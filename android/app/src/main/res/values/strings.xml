@@ -1,0 +1,10 @@
+<resources>
+    <!--
+      ★ 文件必须是 UTF-8（无 BOM）。
+        踩过的坑：Windows PowerShell 5.1 的 Set-Content / Out-File / > 默认按
+        系统代码页（936/GBK）写盘，会把中文写成不可逆的乱码。
+        改本文件务必用编辑器或文件 API。
+    -->
+    <string name="app_name">智能家居蓝牙</string>
+    <string name="settings_title">扫描与设置</string>
+</resources>

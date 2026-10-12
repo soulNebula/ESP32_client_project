@@ -1,0 +1,292 @@
+menu "智能家居（光影语音版）—— 项目配置"
+
+    menu "WiFi 设置"
+
+        config APP_WIFI_SSID
+            string "WiFi 名称 (SSID)"
+            default "YOUR_WIFI_SSID"
+            help
+                家里路由器的 2.4GHz 名称。
+                注意：ESP32-S3【不支持 5GHz】，必须是 2.4GHz 频段。
+
+        config APP_WIFI_PASSWORD
+            string "WiFi 密码"
+            default "YOUR_WIFI_PASSWORD"
+
+        config APP_WIFI_MAX_RETRY
+            int "WiFi 最大重连次数（超过后重启）"
+            range 0 100
+            default 0
+            help
+                0 = 永不放弃，一直重连（推荐，做产品时用这个）。
+
+    endmenu
+
+    menu "MQTT 设置"
+
+        config APP_MQTT_BROKER_URI
+            string "Broker 地址"
+            default "mqtt://broker.emqx.io:1883"
+            help
+                公共测试 broker（免费、可直接用）：
+                  mqtt://broker.emqx.io:1883
+                  mqtt://test.mosquitto.org:1883
+                自建 Mosquitto（局域网）：
+                  mqtt://192.168.1.100:1883
+
+                ⚠ 手机 Web 面板走 WebSocket，是【另一个端口、同一个 broker】：
+                  wss://broker.emqx.io:8084/mqtt
+
+        config APP_MQTT_USERNAME
+            string "Broker 用户名（公共 broker 留空）"
+            default ""
+
+        config APP_MQTT_PASSWORD
+            string "Broker 密码（公共 broker 留空）"
+            default ""
+
+        config APP_MQTT_TOPIC_PREFIX
+            string "Topic 前缀"
+            default "smarthome"
+            help
+                完整 topic = <前缀>/<唯一ID>/<子主题>
+                唯一ID 默认取 MAC 后 3 字节，避免在公共 broker 上和别人撞车。
+                ★ 建议改成带个人标识的字符串（如 smarthome-zhangsan），
+                  公共 broker 上重名前缀会互相看到对方设备。
+
+        config APP_MQTT_UID_OVERRIDE
+            string "唯一ID（留空=自动用 MAC 后 3 字节）"
+            default ""
+
+        config APP_MQTT_PUBLISH_SENSOR_MS
+            int "传感器上报周期 (ms)"
+            range 500 60000
+            default 2000
+
+        config APP_MQTT_KEEPALIVE_S
+            int "Keepalive (秒)"
+            range 10 300
+            default 60
+
+    endmenu
+
+    menu "蓝牙设置"
+
+        config APP_BLE_ENABLE
+            bool "启用蓝牙控制通道（手机 App 直连）"
+            default y
+            help
+                手机 App 直连板子的那条通道，和 MQTT / 网页面板并行。
+                WiFi 账号也能从 App 下发（存 NVS），客户不用串口。
+                关掉后蓝牙不启动，其余通道照常。
+
+        config APP_BLE_DEVICE_NAME_PREFIX
+            string "广播名前缀（手机扫描列表里看到的）"
+            default "SmartHome"
+            help
+                设备名 = <前缀>-<UID>，UID 取 MAC 后 3 字节，
+                例如 SmartHome-4d3b9c。加起来别超 29 字节。
+
+    endmenu
+
+    menu "屏幕设置"
+
+        config APP_PANEL_CONTROLLER_IS_SSD1306
+            bool "显示屏型号：SSD1306 128x64 单色 OLED（I2C，已固定）"
+            default y
+            help
+                ★ 本工程现在固定使用 0.96 寸【单色】OLED：SSD1306 128x64，走 I2C0
+                （SDA=GPIO8 / SCL=GPIO9，与温湿度/BH1750 共线，地址 0x3C 或 0x3D）。
+
+                为什么换掉原来的彩色 SPI TFT：
+                那块 ST7735S 160x80 彩屏实机排查确认模块硬件故障 —— 背光正常、
+                供电 3.25V、初始化序列发完无报错、引脚无冲突，但逐根驱动
+                RES/DC/CS/SCL/SDA 五根信号线，屏对任何操作毫无反应。
+
+                改成 SSD1306 的好处：只占 2 根线（而且是现成的 I2C 总线）、
+                I2C 有 ACK 所以初始化成不成功当场就知道、资料最全。
+                原彩屏占用的 GPIO10~14 / GPIO21 已全部空出。
+
+                本项只是"说明性开关"，目前驱动里写死了 SSD1306；
+                真要再换屏，改 components/ui/panel.c 即可。
+
+        config APP_PANEL_ENABLE
+            bool "启用屏幕显示"
+            default y
+            help
+                关掉后屏幕相关调用全部变成空操作。
+                配件没到时可先用串口调试台 + 手机 Web 面板把整条业务链跑通。
+
+        config APP_DISPLAY_REFRESH_MS
+            int "屏幕数据刷新周期 (ms)"
+            range 500 10000
+            default 3000
+            help
+                ★ 需求② 要求"每隔 3 秒刷新"。
+                注意：告警闪烁是 500ms 一次，由刷屏任务节拍驱动，
+                和本项（数据刷新周期）是两件事 —— 靠"脏页差分"区分，
+                静态内容不会因为本项设成 3000 而停止闪烁。
+
+        config APP_DISPLAY_BLINK_MS
+            int "高温告警闪烁半周期 (ms)"
+            range 100 2000
+            default 500
+            help
+                需求②：温度 ≥32℃ 时告警。
+                ★ 单色屏没有颜色，所以原来的"数字变红"改成
+                  【温度数字整段闪烁 + 整行反白】，在 1bpp 屏上比颜色更醒目。
+                  听觉提示由蜂鸣器给（见下面两个阈值），语音可开可关。
+                本项是"显示/隐藏"各持续多久，500 表示 1 秒一个完整闪烁周期。
+
+    endmenu
+
+    menu "按键（本项目默认没有按键，全部控制走语音）"
+
+        config APP_KEY_ENABLE
+            bool "启用 KEY1 / KEY2 物理按键"
+            default n
+            help
+                ★ 本项目的板子上【没有按键】，所有控制都由语音指令完成
+                （另有手机 MQTT 页面作为第二入口）。
+                所以这里默认关闭：bsp_key 不初始化、按键回调不注册，
+                GPIO0 / GPIO15 两个引脚相应空出。
+
+                为什么保留这个开关而不是把按键代码删掉：
+                按键代码（components/BSP/KEY/key.c）是完整可用的，
+                以后想在板上加两个按键时，把本项打开就恢复，不用重写。
+                另外串口调试台的所有命令一直可用，和按键无关。
+
+    endmenu
+
+    menu "传感器与报警"
+
+        config APP_SENSOR_PERIOD_MS
+            int "传感器采样周期 (ms)"
+            range 500 10000
+            default 1000
+
+        config APP_BUZZER_ACTIVE
+            bool "蜂鸣器是有源型（自带振荡，给高电平就响）"
+            default y
+            help
+                有源 = 常见的那种"3.3V 有源蜂鸣器模块"，接一个 GPIO 即可。
+                无源 = 裸蜂鸣器，需要用 2kHz 方波驱动（固件会自动改用 LEDC）。
+
+        config APP_TEMP_ALERT_C
+            int "温度告警阈值 (℃) —— 屏幕温度数字闪烁"
+            range 10 60
+            default 32
+            help
+                需求②：温度 ≥ 本值 → 屏幕上的温度数字【闪烁】。
+                ★ 单色 OLED 没有颜色，原来是彩屏的"数字变红"，
+                  改成"数字闪烁"，同时蜂鸣器给出听觉提示（见下面两个阈值）。
+                只影响显示，不直接驱动执行器。
+
+        config APP_BUZZER_ON_C
+            int "蜂鸣器启动温度 (℃) ×10"
+            range 100 800
+            default 325
+            help
+                需求②⑥：温度 ≥ 本值 → 蜂鸣器给出提示音。
+                单位是【0.1℃】，默认 325 = 32.5℃（用户指定：超过 32.5℃ 就响）。
+
+        config APP_BUZZER_OFF_C
+            int "蜂鸣器停止温度 (℃) ×10"
+            range 50 790
+            default 320
+            help
+                需求②⑥：温度 ≤ 本值 → 蜂鸣器停止（与启动温度构成迟滞区，
+                32.0~32.5℃ 之间保持原状态，避免在阈值附近反复响/停）。
+                ★ 必须小于"蜂鸣器启动温度"。单位同样是 0.1℃，默认 320 = 32.0℃。
+
+        config APP_RAIN_THRESHOLD_PCT
+            int "判定下雨的雨滴阈值 (%)"
+            range 1 99
+            default 30
+            help
+                需求③：雨滴湿度 > 本值 → 屏幕显示 "Raining!"，否则 "No Rain"。
+
+    endmenu
+
+    menu "应用行为"
+
+        config APP_AUTO_MODE_DEFAULT
+            bool "上电后默认进入自动模式（光控生效）"
+            default y
+            help
+                自动模式：光照联动控制客厅灯（需求①）。
+                手动模式：光控完全停用，灯只听语音 / 手机。
+                运行时可通过语音"自动模式/手动模式"、按键 KEY1、手机来切换。
+
+        config APP_DOOR_LIGHT_CASCADE
+            bool "开门自动点亮客厅灯"
+            default y
+            help
+                需求⑤："语音控制开关门，开门之后亮客厅灯"。
+                只在"关 → 开"的那一沿触发一次；手动模式下也生效
+                （开门亮灯属于安全照明需求）。
+
+        config APP_LIGHT_ON_PCT
+            int "开灯光照阈值 (%)"
+            range 1 99
+            default 20
+            help
+                需求①：光照低于本值 → 自动开客厅灯。
+
+        config APP_LIGHT_OFF_PCT
+            int "关灯光照阈值 (%)"
+            range 2 100
+            default 45
+            help
+                需求①：光照高于本值 → 自动关客厅灯。
+                ★ 必须大于"开灯光照阈值"，两者之间是迟滞区。
+
+        config APP_SERIAL_DEBUG_ENABLE
+            bool "启用串口调试台（配件没到时可先用串口模拟语音指令）"
+            default y
+            help
+                打开后，在串口终端输入指令即可控制全屋设备，例如：
+                  status
+                  on led_living
+                  off all
+                  open door
+                  mode manual
+                  buzzer mute
+                  say led_kitchen_on      （等价于"说了一句话"）
+                  help
+
+    endmenu
+
+    menu "调试与自检"
+
+        config APP_BOARD_BRINGUP_LOG
+            bool "开机打印引脚分配表与模块初始化结果表"
+            default y
+            help
+                ★ 强烈建议保持开启：接完线看一眼开机日志，
+                就能知道哪根线接错了、哪个模块没识别到。
+
+        config APP_PANEL_BOOT_SELFTEST
+            bool "开机时对屏幕做一次自检（纯色轮播 + 边框交叉线）"
+            default y
+            help
+                ★ 调试期建议开着，交付前可以关掉。
+
+                打开后每次上电，屏幕会依次显示：
+                  红 → 绿 → 蓝 → 白 → 黑 → 自检卡（边框+对角交叉线）
+                每张停留约 0.4 秒，然后自动进入正常界面。
+
+                它的价值在"一眼判定"：
+                  · 颜色能依次出现  → 屏、接线、SPI 全部正常，问题在排版或数据
+                  · 颜色反了/红蓝颠倒 → 改 BSP_PANEL_SWAP_RB
+                  · 像负片（黑白反）  → 改 panel.c 的 PANEL_ST7735_INVON
+                  · 画面偏移/只占一角 → 调 BSP_PANEL_X_OFFSET / Y_OFFSET
+                  · 一直灰 / 一直黑，颜色变化看不见 → 数据根本没进屏，
+                                        查 DC / CS / SCL / SDA 四根线
+
+                开机自检期间刷屏任务是停着的（自检完才启动），
+                所以自检画面不会被业务界面打断。
+
+    endmenu
+
+endmenu

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  图标前景：一个屋顶 + 三条信号弧，表达"手机控智能家居"。
+  viewport 108×108，安全区取中间 72×72（自适应图标会被裁成各种形状）。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 屋顶（从左下到顶点再到右下，描边画一个"人"字） -->
+    <path
+        android:pathData="M30,66 L54,44 L78,66"
+        android:strokeColor="#2F9E6E"
+        android:strokeWidth="7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- 房子主体 -->
+    <path
+        android:pathData="M38,64 L38,80 L70,80 L70,64"
+        android:strokeColor="#E8EEF5"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- 信号弧（三段，表示联网） -->
+    <path
+        android:pathData="M46,36 A12,12 0 0 1 62,36"
+        android:strokeColor="#FFD21F"
+        android:strokeWidth="4"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M42,30 A18,18 0 0 1 66,30"
+        android:strokeColor="#FFD21F"
+        android:strokeAlpha="0.6"
+        android:strokeWidth="4"
+        android:strokeLineCap="round" />
+</vector>

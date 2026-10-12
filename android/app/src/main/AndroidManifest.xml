@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  蓝牙版清单：这台 App 不联网，只要蓝牙权限。
+  · Android 12+（API 31+）用 BLUETOOTH_SCAN + BLUETOOTH_CONNECT；
+    neverForLocation 表示我们不拿扫描结果推位置。
+  · Android 11 及以下只能走老的 BLUETOOTH + BLUETOOTH_ADMIN + 位置权限，
+    所以这三条都写 maxSdkVersion="30"，新系统不会去要位置。
+  · 运行时权限在代码里申请（BlePermissions.required()），这里是静态声明。
+  · android:name=".SmartHomeApp" 必需：它是 Application 子类，
+    负责持有 BleManager 和状态，漏掉就是"一打开就崩"。
+  · usesCleartextTraffic 已去掉：这台 App 不建任何网络连接。
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="s" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.ACCESS_FINE_LOCATION"
+        android:maxSdkVersion="30" />
+
+    <!-- 没蓝牙的手机也能装，只是用不了 -->
+    <uses-feature
+        android:name="android.hardware.bluetooth_le"
+        android:required="false" />
+
+    <application
+        android:name=".SmartHomeApp"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.SmartHomeBle">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:label="@string/app_name"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:label="@string/settings_title"
+            android:windowSoftInputMode="adjustResize" />
+    </application>
+
+</manifest>

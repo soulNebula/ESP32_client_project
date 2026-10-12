@@ -1,0 +1,16 @@
+{
+  "name": "ESP32-S3 智能家居",
+  "version": "1.0.0",
+  "author": "光影语音版项目组",
+  "license": "MIT",
+  "platforms": "espressif32",
+  "framework": "arduino",
+  "board": "esp32-s3-devkitc-1",
+  "build": {
+    "mcu": "esp32s3",
+    "f_cpu": "240000000L",
+    "flash_size": "16MB",
+    "partitions": "default_16MB.csv"
+  },
+  "note": "Arduino IDE 不读这个文件，它是给 PlatformIO 用的。\nArduino IDE 里请按 README 选：ESP32S3 Dev Module + ESP SR 16M 分区方案。"
+}

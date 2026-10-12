@@ -1,0 +1,21 @@
+<resources>
+    <!-- ===================================================================
+         配色：与网页面板（web/index.html）同一套色值，两个端看起来"是一家"，
+         但界面结构与交互完全不同（页面是卡片网格，App 是分区列表 + 状态胶囊）。
+         这些颜色同时给主题和 Kotlin 里的程序化 UI 用（Ui.kt 会读同一批色值）。
+         =================================================================== -->
+    <color name="bg">#FF0F1720</color>
+    <color name="card">#FF18222E</color>
+    <color name="card2">#FF1F2C3A</color>
+    <color name="line">#FF2A3A4C</color>
+    <color name="text">#FFE8EEF5</color>
+    <color name="dim">#FF8FA3B8</color>
+    <color name="accent">#FF2F9E6E</color>
+    <color name="accent2">#FF1F7A52</color>
+    <color name="danger">#FFD94141</color>
+    <color name="danger2">#FFA92C2C</color>
+    <color name="warn2">#FFA86512</color>
+    <color name="lamp_on">#FFFFD21F</color>
+
+    <color name="ic_launcher_background">#FF0F1720</color>
+</resources>

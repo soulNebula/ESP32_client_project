@@ -1,0 +1,152 @@
+# =============================================================================
+#  默认构建配置 —— 只在【首次 set-target 生成 sdkconfig 时】生效
+#
+#  ⚠ 改完本文件必须删掉 sdkconfig / sdkconfig.old 再 set-target，否则不生效。
+#     偷懒做法：pwsh -File tools/build.ps1 -FullClean
+# =============================================================================
+
+# ---------- 芯片与 Flash ----------
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+
+# ---------- PSRAM：N16R8 是 8MB Octal PSRAM，必须开 OCT 模式 ----------
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_USE_MALLOC=y
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=16384
+# ★ 这条很重要：屏幕显存（160x80x2B = 25KB）必须落在【内部 SRAM】。
+#   Octal PSRAM 不能直接当 SPI DMA 源，显存放 PSRAM 会花屏 / 严重拖慢刷新。
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+
+# ---------- CPU / RTOS ----------
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_FREERTOS_HZ=1000
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# ---------- 分区表 ----------
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions-16MiB.csv"
+CONFIG_PARTITION_TABLE_OFFSET=0x8000
+
+# ---------- 日志 ----------
+# 控制台走 UART0（GPIO43/44），这样任何 USB 状态下串口调试台都能用。
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_LOG_COLORS=y
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+CONFIG_ESP_CONSOLE_UART_BAUDRATE=115200
+
+# ---------- 看门狗：刷屏偶尔占点时间，给宽松些 ----------
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=10
+
+# ---------- LWIP / WiFi 内存 ----------
+CONFIG_LWIP_MAX_SOCKETS=10
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=10
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=32
+
+# ---------- MQTT ----------
+CONFIG_MQTT_PROTOCOL_311=y
+CONFIG_MQTT_TRANSPORT_SSL=y
+CONFIG_MQTT_TRANSPORT_WEBSOCKET=y
+CONFIG_MQTT_TASK_STACK_SIZE=6144
+CONFIG_MQTT_OUTBOX_EXPIRED_TIMEOUT_MS=30000
+
+# ---------- 编译优化 ----------
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+
+# ---------- 蓝牙 BLE（手机 App 直连那条通道）----------
+# WiFi 和 BLE 共用 2.4GHz 射频，必须开软件共存，否则一起跑会互相干扰
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+CONFIG_ESP_COEX_SW_COEXIST_ENABLE=y
+
+# 只当外设：省 RAM 也省 flash
+CONFIG_BT_NIMBLE_ROLE_PERIPHERAL=y
+CONFIG_BT_NIMBLE_ROLE_CENTRAL=n
+CONFIG_BT_NIMBLE_ROLE_BROADCASTER=n
+CONFIG_BT_NIMBLE_ROLE_OBSERVER=n
+# 只留一个手机连
+CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1
+# ★ 大包：状态 JSON 一次就发完，手机不用等一堆分片
+CONFIG_BT_NIMBLE_ATT_PREFERRED_MTU=512
+
+# =============================================================================
+#  应用默认值（对应 main/Kconfig.projbuild）
+# =============================================================================
+
+# ★ 显示控制器型号默认值：ST7735S 160x80（0.96 寸彩色 IPS，本项目采购型号）
+#   如果到货后发现是别的型号（SSD1331 / ST7789），menuconfig 一行切换即可。
+CONFIG_APP_PANEL_CONTROLLER_ST7735S_160X80=y
+
+# WiFi / MQTT
+# ★ 改这两项之后必须【重新生成 sdkconfig】才生效：
+#     pwsh -File tools/build.ps1 -FullClean      （推荐，会一并删掉 sdkconfig）
+#   或者手工删掉 sdkconfig 与 sdkconfig.old 再 idf.py set-target esp32s3。
+#   原因：sdkconfig 一旦生成，就【不再】被 sdkconfig.defaults 覆盖 —— 这是 ESP-IDF 的设计。
+#
+# 注意 ESP32-S3 只支持 2.4GHz，SSID 必须是 2.4G 那个；本文件存 UTF-8，中文 SSID 可以直接写。
+# ★ 这两个只放占位符 —— 别把自家的 WiFi 名和密码提交进仓库。
+#   仓库是公开的，提交上去等于对全网公开；真实值写在本机的 sdkconfig 里就行
+#   （sdkconfig 已被 .gitignore 排除，不会被提交）。
+CONFIG_APP_WIFI_SSID="your-wifi-ssid"
+CONFIG_APP_WIFI_PASSWORD="your-wifi-password"
+CONFIG_APP_MQTT_BROKER_URI="mqtt://broker.emqx.io:1883"
+# ★ 建议改成带个人标识的前缀，否则公共 broker 上重名前缀会互相看到对方设备
+CONFIG_APP_MQTT_TOPIC_PREFIX="smarthome"
+CONFIG_APP_MQTT_PUBLISH_SENSOR_MS=2000
+CONFIG_APP_MQTT_KEEPALIVE_S=60
+
+# 传感器采样周期
+CONFIG_APP_SENSOR_PERIOD_MS=1000
+
+# ★ 需求② 要求"每隔 3 秒刷新"屏幕数据；温度数字告警闪烁是 500ms 一次
+#   （CONFIG_APP_DISPLAY_BLINK_MS），靠"脏检查"区分，两者互不干扰。
+CONFIG_APP_DISPLAY_REFRESH_MS=3000
+# 温度告警阈值：≥32℃ → 温度数字闪烁（单色屏上没有红色）
+CONFIG_APP_TEMP_ALERT_C=32
+
+# ★ 需求②⑥：蜂鸣器【≥32.5℃ 响 / ≤32.0℃ 停】，模块为低电平触发（默认高电平=停）。
+#   单位是 0.1℃：325 = 32.5℃ 响，320 = 32.0℃ 停。
+#   0.5℃ 死区不能省：AHT20 精度 ±0.3℃ + 低通滤波，死区为 0 会在阈值附近"响-停-响-停"。
+#   ⚠ 32.0 与屏幕闪烁阈值 temp_alert_c(32) 同值，但两者独立，别改混。
+#   阈值与极性必须与 components/BSP/board_config.h、components/App/automation.h 一致。
+CONFIG_APP_BUZZER_ON_C=325
+CONFIG_APP_BUZZER_OFF_C=320
+
+# 需求① 上电默认自动模式（光控生效）
+CONFIG_APP_AUTO_MODE_DEFAULT=y
+
+# 需求⑥ 蜂鸣器硬件形态：1 = 有源（高电平就响，占 1 个 GPIO）
+CONFIG_APP_BUZZER_ACTIVE=y
+
+# 串口调试台：配件没到时靠它模拟语音 / 手机指令
+CONFIG_APP_SERIAL_DEBUG_ENABLE=y
+
+# ★ 开机屏幕自检：上电先刷 红→绿→蓝→白→黑→自检卡（边框+对角交叉线）。
+#   一眼就能判定屏和接线好不好；调试期建议开着，交付前可在 menuconfig 里关掉。
+CONFIG_APP_PANEL_BOOT_SELFTEST=y
+
+# =============================================================================
+#  ESP-SR 离线语音识别（需求⑦：语音助手唤起 + 命令词）
+#  ★ 模型不编进代码，而是放 flash 的 `model` 分区（partitions-16MiB.csv）：
+#    构建时由 esp-sr 生成 srmodels.bin，`idf.py flash` 会一并烧进去。
+# =============================================================================
+
+# 模型放 flash（另一个选项是 SD 卡，本工程没有 SD 卡）
+CONFIG_MODEL_IN_FLASH=y
+# AFE 接口版本：与 esp-sr 2.x 例程/参考工程一致
+CONFIG_AFE_INTERFACE_V1=y
+
+# 降噪 / 人声检测都用 WebRTC 版：模型小，效果够
+CONFIG_SR_NSN_WEBRTC=y
+CONFIG_SR_VADN_WEBRTC=y
+
+# ★ 唤醒词 = 「你好小智」。想换就在 menuconfig → ESP Speech Recognition →
+#   Wake word 里另选一个；改完必须重新烧 model 分区才生效。
+CONFIG_SR_WN_WN9S_NIHAOXIAOZHI=y
+
+# ★ 中文命令词模型：MultiNet7 量化版（体积小，N16R8 的 flash/PSRAM 够用）
+CONFIG_SR_MN_CN_MULTINET7_QUANT=y
+# 不需要英文命令词模型，省 flash 也省 RAM
+CONFIG_SR_MN_EN_NONE=y
